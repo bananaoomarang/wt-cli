@@ -50,6 +50,7 @@ function handleStream (argv) {
 
     prettyStdOut.pipe(process.stdout);
     
+    var isRequestLog = /^(?:GET|PUT|POST|PATCH|DELETE)\s.+\d{3}\s.+$/;
     var container = argv.params.container;
     
     if (container) {
@@ -91,8 +92,9 @@ function handleStream (argv) {
                     
                     if (!data || (data.name !== 'sandbox-kafka' && !argv.all))
                         return;
-                    
+
                     if (argv.raw) console.log(data.msg);
+                    else if (isRequestLog.test(data.msg)) logRequest(data.msg);
                     else if (typeof data === 'string') logger.info(data);
                     else if (argv.verbose) logger.info(data, data.msg);
                     else logger.info(data.msg);
@@ -107,4 +109,26 @@ function logError (e) {
     console.log(e.message.red);
     if (e.trace) console.log(e.trace);
     process.exit(1);
+}
+
+function logRequest(str) {
+    var split =  str.split(' ');
+
+    var method = split[0];
+    var url    = split[1]
+    var code   = Number(split[2]);
+
+    var msg = '';
+
+    // padding to align codes after every method value
+    msg += '['.bold + method.bold + (new Array(7 - method.length)).join(' ');
+    msg += code.toString().bold + ' ';
+    msg += url + ']'.bold;
+
+    if(code >= 200 && code < 300)
+        console.log(msg.green);
+    else if(code >= 300 && code < 400)
+        console.log(msg.blue);
+    else if(code >= 400)
+        console.log(msg.red);
 }
