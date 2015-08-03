@@ -7,7 +7,6 @@ var PrettyStream = require('bunyan-prettystream');
 var Webtask = require('../');
 var _ = require('lodash');
 
-
 module.exports = Cli.createCommand('logs', 'Streaming, real-time logs', {
     params: '[container]',
     options: {
@@ -32,6 +31,12 @@ module.exports = Cli.createCommand('logs', 'Streaming, real-time logs', {
             'default': 'default',
             type: 'string',
         },
+        httpBodies: {
+            alias: 'b',
+            description: 'show request and response bodies',
+            'default': true,
+            type: 'boolean'
+        }
     },
     handler: handleStream,
 });
@@ -50,7 +55,7 @@ function handleStream (argv) {
 
     prettyStdOut.pipe(process.stdout);
     
-    var isRequestLog = /^(?:GET|PUT|POST|PATCH|DELETE)\s.+\d{3}\s.+$/;
+    var isRequestLog = /^.+\s(?:GET|PUT|POST|PATCH|DELETE)\s.+\d{3}\s.+$/;
     var container = argv.params.container;
     
     if (container) {
@@ -95,13 +100,41 @@ function handleStream (argv) {
 
                     if (argv.raw) console.log(data.msg);
                     else if (isRequestLog.test(data.msg)) logRequest(data.msg);
-                    else if (typeof data === 'string') logger.info(data);
+                    else if (typeof data === 'string') logger.info(data.msg);
                     else if (argv.verbose) logger.info(data, data.msg);
                     else logger.info(data.msg);
                 }
             });
         })
         .catch(logError);
+
+        function logRequest(str) {
+            var split = str.split(' ');
+
+            var method = split[1];
+            var url    = split[2];
+            var code   = Number(split[3]);
+            var bodies = split.slice(4).join(' ');
+
+            var msg = '';
+
+            msg += '['.bold + method.bold;
+            msg += (new Array(7 - method.length)).join(' '); // padding to align codes
+            msg += code.toString().bold + ' ';
+            msg += url + ']'.bold;
+
+            if(code >= 200 && code < 300)
+                msg = msg.green;
+            else if(code >= 300 && code < 400)
+                msg = msg.blue;
+            else if(code >= 400)
+                msg = msg.red;
+
+            if(argv.httpBodies && bodies)
+                msg += ' ' + bodies.yellow;
+
+            logger.info(msg);
+        }
 }
 
 function logError (e) {
@@ -111,24 +144,3 @@ function logError (e) {
     process.exit(1);
 }
 
-function logRequest(str) {
-    var split =  str.split(' ');
-
-    var method = split[0];
-    var url    = split[1]
-    var code   = Number(split[2]);
-
-    var msg = '';
-
-    // padding to align codes after every method value
-    msg += '['.bold + method.bold + (new Array(7 - method.length)).join(' ');
-    msg += code.toString().bold + ' ';
-    msg += url + ']'.bold;
-
-    if(code >= 200 && code < 300)
-        console.log(msg.green);
-    else if(code >= 300 && code < 400)
-        console.log(msg.blue);
-    else if(code >= 400)
-        console.log(msg.red);
-}
